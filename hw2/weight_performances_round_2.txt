@@ -1,0 +1,8 @@
+weights = (0.4, 0.2, 0.4), success rate = 0.8333333333333334
+weights = (0.3, 0.2, 0.5), success rate = 0.8111111111111111
+weights = (0.3, 0.1, 0.6), success rate = 0.8111111111111111
+weights = (0.2, 0.3, 0.5), success rate = 0.8111111111111111
+weights = (0.2, 0.2, 0.6), success rate = 0.8
+weights = (0.1, 0.4, 0.5), success rate = 0.8
+weights = (0.4, 0.1, 0.5), success rate = 0.7888888888888889
+weights = (0.2, 0.1, 0.7), success rate = 0.7777777777777778
