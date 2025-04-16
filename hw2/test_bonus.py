@@ -14,7 +14,7 @@ from hw2 import bonus
 # source and target for testing
 trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True)
 source_img, source_class = trainset[6]
-target_class = 5 
+target_class = 0
 
 if torch.cuda.is_available():
     device = "cuda"
