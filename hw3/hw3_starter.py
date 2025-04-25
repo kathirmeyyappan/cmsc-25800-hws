@@ -3,10 +3,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms
+from torchvision.transforms.v2 import JPEG
+from torchvision.transforms import Resize, GaussianBlur
+import random
 
 # import class functions:
 import hw3_utils
-from hw3_utils import target_pgd_attack
+from hw3_utils import get_vgg_model, img2tensorVGG, target_pgd_attack, classes, tensor2imgVGG
 from model import VGG, load_dataset
 
 
@@ -15,29 +18,127 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # --------- Part 1: Simple Transformations + Evaluation ---------
 
+# used https://pytorch.org/vision/main/generated/torchvision.transforms.v2.JPEG.html
 def jpeg_compression(x: torch.Tensor) -> torch.Tensor:
     """
     Applies JPEG compression to the input image tensor
     """
-    pass
+    # JPEG compression only takes tensors with uint8 type on CPU
+    # we scale to [0, 255] for RBG vals before passing into compression
+    x = torch.round(x * 255).to(torch.uint8).cpu()
+    
+    # compress, send to (0, 1) and return
+    compress = JPEG(quality=8)
+    return (compress(x) / 255).clamp(0, 1)
 
 def image_resizing(x: torch.Tensor) -> torch.Tensor:
     """
     Applies resizing and rescaling to the input image tensor
     """
-    pass
+    scale = 0.33
+    _, _, h, w = x.shape
+    shrink = Resize((round(h * scale), round(w * scale)))
+    grow = Resize(size=x.shape[-2:])
+    return grow(shrink(x))
 
 def gaussian_blur(x: torch.Tensor) -> torch.Tensor:
     """
     Applies Gaussian blur to the input image tensor
     """
-    pass
+    blur = GaussianBlur(kernel_size=5, sigma=7.5)
+    return blur(x)
+
+# print helper
+def print_results(name, clean_hits, attack_successes, total):
+        benign_rate = clean_hits / total * 100
+        attack_rate = attack_successes / total * 100
+        print(f"{name} - Benign Success Rate: {benign_rate:.2f}%, Attack Success Rate: {attack_rate:.2f}%")
 
 def evaluate_transformations():
     """
     Evaluates model accuracy and attack success under transformations
     """
-    pass
+    trainset = datasets.CIFAR10(root='./data', train=True, download=True)
+    
+    num_imgs_per_class = 50
+    # get `num_imgs_per_class` images per class to test on
+    source_img_map = {i : [] for i in range(len(classes))}
+    while min(len(source_img_map[i]) for i in range(len(classes))) < num_imgs_per_class:
+        source_img, source_class = trainset[random.randint(0, len(trainset) - 1)]
+        if len(source_img_map[source_class]) < num_imgs_per_class:
+            source_img_map[source_class].append(source_img)
+    
+    # init model 
+    model = get_vgg_model()
+    model.to(device)
+    model.load_state_dict(torch.load("./models/vgg16_cifar10_robust.pth", map_location=torch.device(device), weights_only=True))
+    model.eval()
+    
+    # test attacks
+    og_clean_hits = og_attack_successes = 0
+    compressed_clean_hits = compressed_attack_successes = 0
+    resized_clean_hits = resized_attack_successes = 0
+    gaussian_clean_hits = gaussian_attack_successes = 0
+    for img_class, imgs in source_img_map.items():
+        for img in imgs:
+            t = img2tensorVGG(img, device)
+            
+            # compute adversarial example
+            target_class = random.choice([i for i in range(len(classes)) if i != img_class])
+            ae = img2tensorVGG(target_pgd_attack(img, target_class, model, device), device)
+            
+            # run model on img and ae
+            _, output_class = torch.max(model(t), 1)
+            _, ae_output_class = torch.max(model(ae), 1)
+            # record results
+            if output_class == img_class:
+                og_clean_hits += 1
+            if ae_output_class == target_class:
+                og_attack_successes += 1
+            
+            # repeat process with jpeg compression
+            new_t = jpeg_compression(t)
+            new_ae = jpeg_compression(ae)
+            # run model on img and ae
+            _, output_class = torch.max(model(new_t), 1)
+            _, ae_output_class = torch.max(model(new_ae), 1)
+            # record results
+            if output_class == img_class:
+                compressed_clean_hits += 1
+            if ae_output_class == target_class:
+                compressed_attack_successes += 1
+                
+            # repeat process with image resizing
+            new_t = image_resizing(t)
+            new_ae = image_resizing(ae)
+            # run model on img and ae
+            _, output_class = torch.max(model(new_t), 1)
+            _, ae_output_class = torch.max(model(new_ae), 1)
+            # record results
+            if output_class == img_class:
+                resized_clean_hits += 1
+            if ae_output_class == target_class:
+                resized_attack_successes += 1
+                
+            # repeat process with gaussian blur
+            new_t = gaussian_blur(t)
+            new_ae = gaussian_blur(ae)
+            # run model on img and ae
+            _, output_class = torch.max(model(new_t), 1)
+            _, ae_output_class = torch.max(model(new_ae), 1)
+            # record results
+            if output_class == img_class:
+                gaussian_clean_hits += 1
+            if ae_output_class == target_class:
+                gaussian_attack_successes += 1
+    
+    total = len(classes) * num_imgs_per_class
+
+    print_results("OG", og_clean_hits, og_attack_successes, total)
+    print_results("Compressed", compressed_clean_hits, compressed_attack_successes, total)
+    print_results("Resized", resized_clean_hits, resized_attack_successes, total)
+    print_results("Gaussian", gaussian_clean_hits, gaussian_attack_successes, total)
+            
 
 # --------- Part 2: EOT Attack + Evaluation ---------
 
@@ -113,7 +214,8 @@ def main():
     # TODO: Apply each of the three defenses (JPEG, resize, blur)
 
     # TODO: Evaluate classification accuracy + attack success rate for each defense
-
+    
+    evaluate_transformations() # everything is here oops
 
     # PART 2: EOT Attack
     # TODO: Implement and run your EOT attack
