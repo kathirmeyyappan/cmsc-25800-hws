@@ -134,7 +134,7 @@ def part_3(
     x.requires_grad = True
     
     # consts
-    perturbation_budget = 8 / 255 * (1 - -1) # we get 8 RGB vals of room per channel on the -1 to 1 scale
+    perturbation_budget = 8 / 255 * (1 - 0) # we get 8 RGB vals of room per channel on the -1 to 1 scale
     num_iters = 50
     epsilon = 1/500
     loss_func = torch.nn.CrossEntropyLoss()
