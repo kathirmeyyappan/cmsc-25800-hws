@@ -24,18 +24,18 @@ def jpeg_compression(x: torch.Tensor) -> torch.Tensor:
     Applies JPEG compression to the input image tensor
     """
     # JPEG compression only takes tensors with uint8 type on CPU
-    # we scale to [0, 255] for RBG vals before passing into compression
+    # we scale to [0, 255] for RGB vals before passing into compression
     x = torch.round(x * 255).to(torch.uint8).cpu()
     
     # compress, send to (0, 1) and return
-    compress = JPEG(quality=8)
+    compress = JPEG(quality=10)
     return (compress(x) / 255).clamp(0, 1)
 
 def image_resizing(x: torch.Tensor) -> torch.Tensor:
     """
     Applies resizing and rescaling to the input image tensor
     """
-    scale = 0.33
+    scale = 0.3
     _, _, h, w = x.shape
     shrink = Resize((round(h * scale), round(w * scale)))
     grow = Resize(size=x.shape[-2:])
@@ -45,25 +45,34 @@ def gaussian_blur(x: torch.Tensor) -> torch.Tensor:
     """
     Applies Gaussian blur to the input image tensor
     """
-    blur = GaussianBlur(kernel_size=5, sigma=7.5)
+    blur = GaussianBlur(kernel_size=5, sigma=13)
     return blur(x)
 
 # print helper
-def print_results(name, clean_hits, attack_successes, total):
-        benign_rate = clean_hits / total * 100
-        attack_rate = attack_successes / total * 100
-        print(f"{name} - Benign Success Rate: {benign_rate:.2f}%, Attack Success Rate: {attack_rate:.2f}%")
+def print_results(name, clean_hits, pgd_hits, attack_successes, total):
+    print(
+        f"----------{name}----------\n"
+        f"Benign Classification Success Rate: {clean_hits / total} \n"
+        f"PGD Classification Success Rate: {pgd_hits / total} \n"
+        f"Attack Success Rate: {attack_successes / total } \n\n"        
+    )
 
 def evaluate_transformations():
     """
     Evaluates model accuracy and attack success under transformations
     """
+    # declare all counters for each method
+    og_clean_hits = og_attack_successes = og_pgd_hits = 0
+    compressed_clean_hits = compressed_attack_successes = compressed_pgd_hits = 0
+    resized_clean_hits = resized_attack_successes = resized_pgd_hits = 0
+    gaussian_clean_hits = gaussian_attack_successes = gaussian_pgd_hits = 0
+
     trainset = datasets.CIFAR10(root='./data', train=True, download=True)
     
-    num_imgs_per_class = 50
+    num_imgs_per_class = 5
     # get `num_imgs_per_class` images per class to test on
-    source_img_map = {i : [] for i in range(len(classes))}
-    while min(len(source_img_map[i]) for i in range(len(classes))) < num_imgs_per_class:
+    source_img_map = {i: [] for i in range(len(classes))}
+    while min(len(source_img_map[i]) for i in source_img_map) < num_imgs_per_class:
         source_img, source_class = trainset[random.randint(0, len(trainset) - 1)]
         if len(source_img_map[source_class]) < num_imgs_per_class:
             source_img_map[source_class].append(source_img)
@@ -74,11 +83,6 @@ def evaluate_transformations():
     model.load_state_dict(torch.load("./models/vgg16_cifar10_robust.pth", map_location=torch.device(device), weights_only=True))
     model.eval()
     
-    # test attacks
-    og_clean_hits = og_attack_successes = 0
-    compressed_clean_hits = compressed_attack_successes = 0
-    resized_clean_hits = resized_attack_successes = 0
-    gaussian_clean_hits = gaussian_attack_successes = 0
     for img_class, imgs in source_img_map.items():
         for img in imgs:
             t = img2tensorVGG(img, device)
@@ -87,58 +91,67 @@ def evaluate_transformations():
             target_class = random.choice([i for i in range(len(classes)) if i != img_class])
             ae = img2tensorVGG(target_pgd_attack(img, target_class, model, device), device)
             
-            # run model on img and ae
+            # --- OG ---
             _, output_class = torch.max(model(t), 1)
             _, ae_output_class = torch.max(model(ae), 1)
             # record results
             if output_class == img_class:
                 og_clean_hits += 1
             if ae_output_class == target_class:
+                og_pgd_hits += 1
+            if ae_output_class != img_class:
                 og_attack_successes += 1
             
-            # repeat process with jpeg compression
+            # --- JPEG compression ---
+            # JPEG compression only takes tensors with uint8 type on CPU
+            # we scale to [0, 255] for RGB vals before passing into compression
             new_t = jpeg_compression(t)
             new_ae = jpeg_compression(ae)
-            # run model on img and ae
             _, output_class = torch.max(model(new_t), 1)
             _, ae_output_class = torch.max(model(new_ae), 1)
             # record results
             if output_class == img_class:
                 compressed_clean_hits += 1
             if ae_output_class == target_class:
+                compressed_pgd_hits += 1
+            if ae_output_class != img_class:
                 compressed_attack_successes += 1
                 
-            # repeat process with image resizing
+            # --- image resizing ---
+            scale = 0.3
+            # Applies resizing and rescaling to the input image tensor
             new_t = image_resizing(t)
             new_ae = image_resizing(ae)
-            # run model on img and ae
             _, output_class = torch.max(model(new_t), 1)
             _, ae_output_class = torch.max(model(new_ae), 1)
             # record results
             if output_class == img_class:
                 resized_clean_hits += 1
             if ae_output_class == target_class:
+                resized_pgd_hits += 1
+            if ae_output_class != img_class:
                 resized_attack_successes += 1
                 
-            # repeat process with gaussian blur
+            # --- Gaussian blur ---
+            # Applies Gaussian blur to the input image tensor
             new_t = gaussian_blur(t)
             new_ae = gaussian_blur(ae)
-            # run model on img and ae
             _, output_class = torch.max(model(new_t), 1)
             _, ae_output_class = torch.max(model(new_ae), 1)
             # record results
             if output_class == img_class:
                 gaussian_clean_hits += 1
             if ae_output_class == target_class:
+                gaussian_pgd_hits += 1
+            if ae_output_class != img_class:
                 gaussian_attack_successes += 1
     
     total = len(classes) * num_imgs_per_class
 
-    print_results("OG", og_clean_hits, og_attack_successes, total)
-    print_results("Compressed", compressed_clean_hits, compressed_attack_successes, total)
-    print_results("Resized", resized_clean_hits, resized_attack_successes, total)
-    print_results("Gaussian", gaussian_clean_hits, gaussian_attack_successes, total)
-            
+    print_results("OG", og_clean_hits, og_pgd_hits, og_attack_successes, total)
+    print_results("Compressed", compressed_clean_hits, compressed_pgd_hits, compressed_attack_successes, total)
+    print_results("Resized", resized_clean_hits, resized_pgd_hits, resized_attack_successes, total)
+    print_results("Gaussian", gaussian_clean_hits, resized_pgd_hits, gaussian_attack_successes, total)
 
 # --------- Part 2: EOT Attack + Evaluation ---------
 
