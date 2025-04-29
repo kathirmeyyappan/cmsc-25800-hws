@@ -250,8 +250,8 @@ def evaluate_new_attack():
             
             # compute adversarial examples
             target_class = random.choice([i for i in range(len(classes)) if i != img_class])
-            ae = target_pgd_attack(img, target_class, model, device), device
-            eot_ae = eot_attack(model, t, torch.tensor([target_class])), device
+            ae = img2tensorVGG(target_pgd_attack(img, target_class, model, device), device)
+            eot_ae = img2tensorVGG(eot_attack(model, t, torch.tensor([target_class])), device)
             
             # stuff
             random_transformation = random.choice(transformations)
@@ -286,7 +286,7 @@ def evaluate_new_attack():
 # --------- Part 3: Defensive Distillation + Evaluation ---------
 
 # from hw1
-def evaluate_model(model, val_loader):
+def student_results(model, val_loader):
     # Set the model to evaluation mode
     model.eval()
     model.to(device)
@@ -329,7 +329,8 @@ def train_model(train_loader, val_loader, model, parent, temp):
     
     loss_list = []
     accuracy_list = []
-
+    
+    loss_fn = torch.nn.KLDivLoss(reduction='batchmean')
     for epoch in range(num_epochs):
         model.train()
         epoch_loss = []
@@ -337,14 +338,13 @@ def train_model(train_loader, val_loader, model, parent, temp):
                         
             images = images.to(device)
             
+            student_logits = model(images)
+            teacher_logits = parent(images).detach()
             
-            # softmax stuff w temp for loss calc
-            student_probs = softmax_with_temperature(model(images), temp)
-            with torch.no_grad():
-                teacher_probs = softmax_with_temperature(parent(images), temp)
-            # get loss
-            loss = torch.nn.MSELoss() # cmp loss on tensor to tensor
-            loss_val = loss(student_probs, teacher_probs)
+            student_probs = F.log_softmax(student_logits / temp, dim=1) # same as helper but with log for kldiv loss
+            teacher_probs = F.softmax(teacher_logits / temp, dim=1) # same as helper
+
+            loss_val = loss_fn(student_probs, teacher_probs) * (temp ** 2)
             
             # back prop and update params
             optimizer.zero_grad()
@@ -353,7 +353,7 @@ def train_model(train_loader, val_loader, model, parent, temp):
 
             epoch_loss.append(loss_val.data.item())
         
-        accuracy = evaluate_model(model, val_loader)
+        accuracy = student_results(model, val_loader)
         
         loss_list.append(np.mean(epoch_loss))
         accuracy_list.append(accuracy)
@@ -378,39 +378,39 @@ def student_VGG(teacher_path: str = "models/vgg16_cifar10_robust.pth", temperatu
     train_model(train_loader, val_loader, student, parent, temperature)
     torch.save(student.state_dict(), "models/student_VGG.pth")
 
+
 def evaluate_distillation() -> None:
     """
     TODO: Evaluates the student model on clean data and under targeted PGD attack
     
     """
     
-    # load models
-    og_model = VGG('VGG16').to(device)
-    og_model.load_state_dict(torch.load("models/vgg16_cifar10_robust.pth", map_location=device))
+    # load model
     model = VGG('VGG16').to(device)
     model.load_state_dict(torch.load("models/student_VGG.pth", map_location=device)) # eventually this will be the actual student model - rn it's a copy to eval
+    model.eval()
     
     # declare all counters for each method
-    pgd_hits = og_hits = pgd_attack_success_og_model = pgd_attack_success_new_model = 0
+    pgd_hits = og_hits = pgd_attack_success_new_model = 0
 
     _, val_loader = load_dataset()
+    
     evals = []
     for images, labels in val_loader:
         images, labels = images.to(device), labels.to(device)
         for img, lbl in zip(images, labels):
-            evals.append((lbl, tensor2imgVGG(img)))
-    print(len(evals))
+            evals.append((lbl, img.unsqueeze(0)))
+        if len(evals) > 200:
+            break
         
-    for img_class, img in evals:
-        og_t = img2tensorVGG(img, device)
-        
+    for img_class, og_t in evals:
         # compute adversarial examples
         target_class = random.choice([i for i in range(len(classes)) if i != img_class])
-        ae_t = img2tensorVGG(target_pgd_attack(img, target_class, model, device), device)
+        ae_t = img2tensorVGG(target_pgd_attack(tensor2imgVGG(og_t), target_class, model, device), device)
 
         _, ae_output_class = torch.max(model(ae_t), 1)
         _, og_output_class = torch.max(model(og_t), 1)
-        _, ae_output_class_og_model = torch.max(og_model(ae_t), 1)
+        
         # record results
         if ae_output_class == img_class:
             pgd_hits += 1
@@ -418,18 +418,15 @@ def evaluate_distillation() -> None:
             og_hits += 1
         if ae_output_class == target_class:
             pgd_attack_success_new_model += 1
-        if ae_output_class_og_model == target_class:
-            pgd_attack_success_og_model += 1
                 
     
-    total = len(classes) * num_imgs_per_class
+    total = len(evals)
 
     print(
         f"\n---------- PART 3 ----------\n"
         f"Original Image Classification Success Rate: {og_hits / total} \n"
         f"PGD Image Classification Success Rate: {pgd_hits / total} \n"
         f"PGD Attack Success Rate: {pgd_attack_success_new_model / total} \n"  
-        f"PGD Attack Success Rate (Parent Model): {pgd_attack_success_og_model / total} \n"   
     )
     
     
@@ -471,7 +468,7 @@ def main():
 
     # TODO: Evaluate classification accuracy + attack success rate for each defense
     
-    # evaluate_transformations() # everything is here oops
+    evaluate_transformations() # everything is here oops
 
     # PART 2: EOT Attack
     # TODO: Implement and run your EOT attack
@@ -480,7 +477,7 @@ def main():
 
     # TODO: Save your results and write your short analysis separately
     
-    # evaluate_new_attack()
+    evaluate_new_attack()
 
 
     # PART 3: Distillation Defense
@@ -492,6 +489,7 @@ def main():
     
     # TODO: Save or print results and include your writeup separately
     
+    # student_VGG()
     evaluate_distillation()
 
     
