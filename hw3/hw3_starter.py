@@ -490,7 +490,7 @@ def main():
     # TODO: Save or print results and include your writeup separately
     
     # student_VGG()
-    evaluate_distillation()
+    # evaluate_distillation()
 
     
     # BONUS: Adaptive attack (optional)
