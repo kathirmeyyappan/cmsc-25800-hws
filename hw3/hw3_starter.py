@@ -5,11 +5,13 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torchvision.transforms.v2 import JPEG
 from torchvision.transforms import Resize, GaussianBlur
+import torch.nn.functional as F
 import random
+import numpy as np
 
 # import class functions:
 import hw3_utils
-from hw3_utils import get_vgg_model, img2tensorVGG, target_pgd_attack, classes, tensor2imgVGG
+from hw3_utils import get_vgg_model, img2tensorVGG, softmax_with_temperature, target_pgd_attack, classes, tensor2imgVGG
 from model import VGG, load_dataset
 
 
@@ -35,7 +37,7 @@ def image_resizing(x: torch.Tensor) -> torch.Tensor:
     """
     Applies resizing and rescaling to the input image tensor
     """
-    scale = 0.3
+    scale = 0.35
     _, _, h, w = x.shape
     shrink = Resize((round(h * scale), round(w * scale)))
     grow = Resize(size=x.shape[-2:])
@@ -45,7 +47,7 @@ def gaussian_blur(x: torch.Tensor) -> torch.Tensor:
     """
     Applies Gaussian blur to the input image tensor
     """
-    blur = GaussianBlur(kernel_size=5, sigma=13)
+    blur = GaussianBlur(kernel_size=5, sigma=10)
     return blur(x)
 
 # print helper
@@ -54,7 +56,7 @@ def print_results(name, clean_classification_success, pgd_classification_success
         f"----------{name}----------\n"
         f"Benign Classification Success Rate: {clean_classification_success / total} \n"
         f"PGD Classification Success Rate: {pgd_classification_success / total} \n"
-        f"Attack Success Rate: {attack_successes / total } \n\n"        
+        f"Attack Success Rate: {attack_successes / total } \n"        
     )
 
 def evaluate_transformations():
@@ -142,7 +144,8 @@ def evaluate_transformations():
                 gaussian_attack_successes += 1
     
     total = len(classes) * num_imgs_per_class
-
+    
+    print(f"\n---------- PART 1 ----------\n")
     print_results("OG", og_clean_classification_success, og_pgd_classification_success, og_attack_successes, total)
     print_results("Compressed", compressed_clean_classification_success, compressed_pgd_classification_success, compressed_attack_successes, total)
     print_results("Resized", resized_clean_classification_success, resized_pgd_classification_success, resized_attack_successes, total)
@@ -221,7 +224,7 @@ def evaluate_new_attack():
     Evaluates model accuracy and attack success under transformations
     """
     # declare all counters for each method
-    pgd_hits = eot_pgd_hits = 0
+    pgd_attack_hits = eot_pgd_attack_hits = pgd_classification_hits = eot_pgd_classification_hits = 0
 
     trainset = datasets.CIFAR10(root='./data', train=True, download=True)
     
@@ -247,8 +250,8 @@ def evaluate_new_attack():
             
             # compute adversarial examples
             target_class = random.choice([i for i in range(len(classes)) if i != img_class])
-            ae = img2tensorVGG(target_pgd_attack(img, target_class, model, device), device)
-            eot_ae = img2tensorVGG(eot_attack(model, t, torch.tensor([target_class])), device)
+            ae = target_pgd_attack(img, target_class, model, device), device
+            eot_ae = eot_attack(model, t, torch.tensor([target_class])), device
             
             # stuff
             random_transformation = random.choice(transformations)
@@ -259,22 +262,103 @@ def evaluate_new_attack():
             _, ae_output_class = torch.max(model(new_ae), 1)
             _, eot_ae_output_class = torch.max(model(new_eot_ae), 1)
             # record results
+            if ae_output_class == img_class:
+                pgd_classification_hits += 1
+            if eot_ae_output_class == img_class:
+                eot_pgd_classification_hits += 1
             if ae_output_class == target_class:
-                pgd_hits += 1
+                pgd_attack_hits += 1
             if eot_ae_output_class == target_class:
-                eot_pgd_hits += 1
+                eot_pgd_attack_hits += 1
     
     total = len(classes) * num_imgs_per_class
 
     print(
-        f"---------- PART 2 ----------\n"
-        f"PGD Classification Success Rate: {pgd_hits / total} \n"
-        f"EOT PGD Classification Success Rate: {eot_pgd_hits / total} \n\n"   
+        f"\n---------- PART 2 ----------\n"
+        f"PGD Classification Success Rate: {pgd_classification_hits / total} \n"
+        f"EOT PGD Classification Success Rate: {eot_pgd_classification_hits / total} \n" 
+        f"PGD Attack Success Rate: {pgd_attack_hits / total} \n"
+        f"EOT PGD Attack Success Rate: {eot_pgd_attack_hits / total} \n"   
     )
     
 
 
 # --------- Part 3: Defensive Distillation + Evaluation ---------
+
+# from hw1
+def evaluate_model(model, val_loader):
+    # Set the model to evaluation mode
+    model.eval()
+    model.to(device)
+    
+    hits = tot = 0
+    with torch.no_grad():
+        for images, labels in val_loader:
+            images, labels = images.to(device), labels.to(device)
+
+            # TODO:
+            # Complete the eveluation process
+            #   Get outputs from the model on the current batch of images
+            #   Get the predicted labels of the current batch of images from the model outputs
+            #   Compare the predicted labels with the labels to find which ones are correct
+            #   Also increase the count for the total number of data used in validation
+            output = model(images)
+            _values, predictions = torch.max(output, dim=1)
+            # for i in range(labels.size(dim=0)):
+            #     if predictions[i] == labels[i]
+            #         hits += 1
+            
+            hits += (labels == predictions).sum()
+            tot += labels.size(dim=0)
+    
+    # TODO:
+    # Complete the computation for accuracy: 0 <= accuracy <= 1
+    accuracy = hits / tot
+    
+    assert((accuracy >= 0) and (accuracy <= 1))
+    return accuracy.detach().cpu().item()
+
+# from hw1
+def train_model(train_loader, val_loader, model, parent, temp):
+    
+    learning_rate = 0.005
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+    num_epochs = 20
+    assert(num_epochs <= 50)
+    
+    loss_list = []
+    accuracy_list = []
+
+    for epoch in range(num_epochs):
+        model.train()
+        epoch_loss = []
+        for images, _ in train_loader:
+                        
+            images = images.to(device)
+            
+            
+            # softmax stuff w temp for loss calc
+            student_probs = softmax_with_temperature(model(images), temp)
+            with torch.no_grad():
+                teacher_probs = softmax_with_temperature(parent(images), temp)
+            # get loss
+            loss = torch.nn.MSELoss() # cmp loss on tensor to tensor
+            loss_val = loss(student_probs, teacher_probs)
+            
+            # back prop and update params
+            optimizer.zero_grad()
+            loss_val.backward()
+            optimizer.step()
+
+            epoch_loss.append(loss_val.data.item())
+        
+        accuracy = evaluate_model(model, val_loader)
+        
+        loss_list.append(np.mean(epoch_loss))
+        accuracy_list.append(accuracy)
+        print(f"Epoch: {epoch}, Training Loss: {loss_list[-1]:.2f}, Validation Accuracy: {accuracy*100:.2f}%")
+
 
 def student_VGG(teacher_path: str = "models/vgg16_cifar10_robust.pth", temperature: float = 20.0) -> None:
     """
@@ -284,19 +368,73 @@ def student_VGG(teacher_path: str = "models/vgg16_cifar10_robust.pth", temperatu
         teacher_path: Path to the pretrained teacher model.
         temperature: Softmax temperature for distillation.
     """
+    # load teacher model
+    parent = VGG('VGG16').to(device)
+    parent.load_state_dict(torch.load("models/vgg16_cifar10_robust.pth", map_location=device))
+    
+    # student model
+    train_loader, val_loader = load_dataset()
     student = hw3_utils.get_vgg_model().to(device)
-
-
+    train_model(train_loader, val_loader, student, parent, temperature)
     torch.save(student.state_dict(), "models/student_VGG.pth")
-
-    pass
 
 def evaluate_distillation() -> None:
     """
     TODO: Evaluates the student model on clean data and under targeted PGD attack
     
     """
-    pass
+    
+    # load models
+    og_model = VGG('VGG16').to(device)
+    og_model.load_state_dict(torch.load("models/vgg16_cifar10_robust.pth", map_location=device))
+    model = VGG('VGG16').to(device)
+    model.load_state_dict(torch.load("models/student_VGG.pth", map_location=device)) # eventually this will be the actual student model - rn it's a copy to eval
+    
+    # declare all counters for each method
+    pgd_hits = og_hits = pgd_attack_success_og_model = pgd_attack_success_new_model = 0
+
+    _, val_loader = load_dataset()
+    evals = []
+    for images, labels in val_loader:
+        images, labels = images.to(device), labels.to(device)
+        for img, lbl in zip(images, labels):
+            evals.append((lbl, tensor2imgVGG(img)))
+    print(len(evals))
+        
+    for img_class, img in evals:
+        og_t = img2tensorVGG(img, device)
+        
+        # compute adversarial examples
+        target_class = random.choice([i for i in range(len(classes)) if i != img_class])
+        ae_t = img2tensorVGG(target_pgd_attack(img, target_class, model, device), device)
+
+        _, ae_output_class = torch.max(model(ae_t), 1)
+        _, og_output_class = torch.max(model(og_t), 1)
+        _, ae_output_class_og_model = torch.max(og_model(ae_t), 1)
+        # record results
+        if ae_output_class == img_class:
+            pgd_hits += 1
+        if og_output_class == img_class:
+            og_hits += 1
+        if ae_output_class == target_class:
+            pgd_attack_success_new_model += 1
+        if ae_output_class_og_model == target_class:
+            pgd_attack_success_og_model += 1
+                
+    
+    total = len(classes) * num_imgs_per_class
+
+    print(
+        f"\n---------- PART 3 ----------\n"
+        f"Original Image Classification Success Rate: {og_hits / total} \n"
+        f"PGD Image Classification Success Rate: {pgd_hits / total} \n"
+        f"PGD Attack Success Rate: {pgd_attack_success_new_model / total} \n"  
+        f"PGD Attack Success Rate (Parent Model): {pgd_attack_success_og_model / total} \n"   
+    )
+    
+    
+    
+    
 
 # # --------- Bonus Part: Adaptive Attack ---------
 
@@ -325,7 +463,7 @@ def main():
     # load teacher model
     model = VGG('VGG16').to(device)
     model.load_state_dict(torch.load("models/vgg16_cifar10_robust.pth", map_location=device))
-
+    
     # PART 1: Evaluate simple defenses
     # TODO: Evaluate baseline accuracy on clean and PGD-attacked images
 
@@ -333,7 +471,7 @@ def main():
 
     # TODO: Evaluate classification accuracy + attack success rate for each defense
     
-    evaluate_transformations() # everything is here oops
+    # evaluate_transformations() # everything is here oops
 
     # PART 2: EOT Attack
     # TODO: Implement and run your EOT attack
@@ -353,6 +491,8 @@ def main():
     # TODO: Evaluate student model accuracy on clean and PGD-attacked images
     
     # TODO: Save or print results and include your writeup separately
+    
+    evaluate_distillation()
 
     
     # BONUS: Adaptive attack (optional)
