@@ -69,13 +69,13 @@ def evaluate_transformations():
     resized_clean_classification_success = resized_attack_successes = resized_pgd_classification_success = 0
     gaussian_clean_classification_success = gaussian_attack_successes = gaussian_pgd_classification_success = 0
 
-    trainset = datasets.CIFAR10(root='./data', train=True, download=True)
+    testset = datasets.CIFAR10(root='./data', train=False, download=True)
     
     num_imgs_per_class = 5
     # get `num_imgs_per_class` images per class to test on
     source_img_map = {i: [] for i in range(len(classes))}
     while min(len(source_img_map[i]) for i in source_img_map) < num_imgs_per_class:
-        source_img, source_class = trainset[random.randint(0, len(trainset) - 1)]
+        source_img, source_class = testset[random.randint(0, len(testset) - 1)]
         if len(source_img_map[source_class]) < num_imgs_per_class:
             source_img_map[source_class].append(source_img)
     
@@ -226,13 +226,13 @@ def evaluate_new_attack():
     # declare all counters for each method
     
 
-    trainset = datasets.CIFAR10(root='./data', train=True, download=True)
+    testset = datasets.CIFAR10(root='./data', train=False, download=True)
     
     num_imgs_per_class = 5
     # get `num_imgs_per_class` images per class to test on
     source_img_map = {i: [] for i in range(len(classes))}
     while min(len(source_img_map[i]) for i in source_img_map) < num_imgs_per_class:
-        source_img, source_class = trainset[random.randint(0, len(trainset) - 1)]
+        source_img, source_class = testset[random.randint(0, len(testset) - 1)]
         if len(source_img_map[source_class]) < num_imgs_per_class:
             source_img_map[source_class].append(source_img)
     
@@ -510,7 +510,7 @@ def main():
 
     # TODO: Save your results and write your short analysis separately
     
-    # evaluate_new_attack()
+    evaluate_new_attack()
 
 
     # PART 3: Distillation Defense
