@@ -30,14 +30,14 @@ def jpeg_compression(x: torch.Tensor) -> torch.Tensor:
     x = torch.round(x * 255).to(torch.uint8).cpu()
     
     # compress, send to (0, 1) and return
-    compress = JPEG(quality=10)
+    compress = JPEG(quality=(10, 11))
     return (compress(x) / 255).clamp(0, 1)
 
 def image_resizing(x: torch.Tensor) -> torch.Tensor:
     """
     Applies resizing and rescaling to the input image tensor
     """
-    scale = 0.35
+    scale = random.uniform(0.3, 0.35)
     _, _, h, w = x.shape
     shrink = Resize((round(h * scale), round(w * scale)))
     grow = Resize(size=x.shape[-2:])
@@ -47,7 +47,7 @@ def gaussian_blur(x: torch.Tensor) -> torch.Tensor:
     """
     Applies Gaussian blur to the input image tensor
     """
-    blur = GaussianBlur(kernel_size=5, sigma=10)
+    blur = GaussianBlur(kernel_size=5, sigma=(9, 11))
     return blur(x)
 
 # print helper
@@ -224,7 +224,7 @@ def evaluate_new_attack():
     Evaluates model accuracy and attack success under transformations
     """
     # declare all counters for each method
-    pgd_attack_hits = eot_pgd_attack_hits = pgd_classification_hits = eot_pgd_classification_hits = 0
+    
 
     trainset = datasets.CIFAR10(root='./data', train=True, download=True)
     
@@ -244,6 +244,8 @@ def evaluate_new_attack():
     
     transformations = [jpeg_compression, image_resizing, gaussian_blur]
     
+    eot_pgd_attack_hits = pgd_attack_hits = eot_gaussian_hits = gaussian_hits = eot_resize_hits = resize_hits = eot_jpeg_hits = jpeg_hits = eot_pgd_classification_hits = pgd_classification_hits = 0
+    
     for img_class, imgs in source_img_map.items():
         for img in imgs:
             t = img2tensorVGG(img, device)
@@ -253,19 +255,42 @@ def evaluate_new_attack():
             ae = img2tensorVGG(target_pgd_attack(img, target_class, model, device), device)
             eot_ae = img2tensorVGG(eot_attack(model, t, torch.tensor([target_class])), device)
             
-            # stuff
+            # ALL JUST TRACKING OG CLASSIFICATION ACCURACY ON THESE
             random_transformation = random.choice(transformations)
             # new_t = random_transformation(t)
-            new_ae = random_transformation(ae)
-            new_eot_ae = random_transformation(eot_ae)
-            # _, output_class = torch.max(model(new_t), 1)
+            jpeg_new_eot_ae = jpeg_compression(eot_ae)
+            resized_new_eot_ae = image_resizing(eot_ae)
+            gaussian_new_eot_ae = gaussian_blur(eot_ae)
+            # record results
+            if torch.max(model(eot_ae), 1)[1] == img_class:
+                eot_pgd_classification_hits += 1
+            if torch.max(model(jpeg_new_eot_ae), 1)[1] == img_class:
+                eot_jpeg_hits += 1
+            if torch.max(model(resized_new_eot_ae), 1)[1] == img_class:
+                eot_resize_hits += 1
+            if torch.max(model(gaussian_new_eot_ae), 1)[1] == img_class:
+                eot_gaussian_hits += 1
+            
+            jpeg_new_ae = jpeg_compression(ae)
+            resized_new_ae = image_resizing(ae)
+            gaussian_new_ae = gaussian_blur(ae)
+            # record results
+            if torch.max(model(ae), 1)[1] == img_class:
+                pgd_classification_hits += 1
+            if torch.max(model(jpeg_new_ae), 1)[1] == img_class:
+                jpeg_hits += 1
+            if torch.max(model(resized_new_ae), 1)[1] == img_class:
+                resize_hits += 1
+            if torch.max(model(gaussian_new_ae), 1)[1] == img_class:
+                gaussian_hits += 1
+            
+            # RANDOM DEFENSE
+            f = random.choice(transformations)
+            new_ae = f(ae)
+            new_eot_ae = f(eot_ae)
             _, ae_output_class = torch.max(model(new_ae), 1)
             _, eot_ae_output_class = torch.max(model(new_eot_ae), 1)
             # record results
-            if ae_output_class == img_class:
-                pgd_classification_hits += 1
-            if eot_ae_output_class == img_class:
-                eot_pgd_classification_hits += 1
             if ae_output_class == target_class:
                 pgd_attack_hits += 1
             if eot_ae_output_class == target_class:
@@ -275,10 +300,16 @@ def evaluate_new_attack():
 
     print(
         f"\n---------- PART 2 ----------\n"
-        f"PGD Classification Success Rate: {pgd_classification_hits / total} \n"
-        f"EOT PGD Classification Success Rate: {eot_pgd_classification_hits / total} \n" 
-        f"PGD Attack Success Rate: {pgd_attack_hits / total} \n"
-        f"EOT PGD Attack Success Rate: {eot_pgd_attack_hits / total} \n"   
+        f"PGD Classification Success Rate (Base): {pgd_classification_hits / total} \n"
+        f"EOT PGD Classification Success Rate (Base): {eot_pgd_classification_hits / total} \n" 
+        # f"PGD Classification Success Rate (JPEG Compression): {jpeg_hits / total} \n"
+        f"EOT PGD Classification Success Rate (JPEG Compression): {eot_jpeg_hits / total} \n" 
+        # f"PGD Classification Success Rate (Resize): {resize_hits / total} \n"
+        f"EOT PGD Classification Success Rate (Resize): {eot_resize_hits / total} \n" 
+        # f"PGD Classification Success Rate (Gaussian): {gaussian_hits / total} \n"
+        f"EOT PGD Classification Success Rate (Gaussian): {eot_gaussian_hits / total} \n\n" 
+        f"PGD Attack Success Rate on Random Defense: {pgd_attack_hits / total} \n"
+        f"EOT Attack Success Rate on Random Defense: {eot_pgd_attack_hits / total} \n\n"        
     )
     
 
@@ -323,6 +354,7 @@ def train_model(train_loader, val_loader, model, parent, temp):
     
     learning_rate = 0.005
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
 
     num_epochs = 20
     assert(num_epochs <= 50)
@@ -354,6 +386,7 @@ def train_model(train_loader, val_loader, model, parent, temp):
             epoch_loss.append(loss_val.data.item())
         
         accuracy = student_results(model, val_loader)
+        scheduler.step()
         
         loss_list.append(np.mean(epoch_loss))
         accuracy_list.append(accuracy)
@@ -477,7 +510,7 @@ def main():
 
     # TODO: Save your results and write your short analysis separately
     
-    evaluate_new_attack()
+    # evaluate_new_attack()
 
 
     # PART 3: Distillation Defense

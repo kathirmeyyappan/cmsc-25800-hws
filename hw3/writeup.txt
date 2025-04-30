@@ -1,0 +1,50 @@
+---------- PART 1 ----------
+
+RESULTS FOR PART 1 BELOW FOR EACH TYPE OF TRANSFORMATION:
+
+----------OG----------
+Benign Classification Success Rate: 0.92 
+PGD Classification Success Rate: 0.04 
+Attack Success Rate: 0.96 
+
+----------Compressed----------
+Benign Classification Success Rate: 0.74 
+PGD Classification Success Rate: 0.58 
+Attack Success Rate: 0.16 
+
+----------Resized----------
+Benign Classification Success Rate: 0.62 
+PGD Classification Success Rate: 0.5 
+Attack Success Rate: 0.08 
+
+----------Gaussian----------
+Benign Classification Success Rate: 0.82 
+PGD Classification Success Rate: 0.5 
+Attack Success Rate: 0.1 
+
+
+
+
+
+---------- PART 2 ----------
+Write up: After running, we got the results below.
+
+PGD Classification Success Rate (Base): 0.02 
+EOT PGD Classification Success Rate (Base): 0.64 
+EOT PGD Classification Success Rate (JPEG Compression): 0.58 
+EOT PGD Classification Success Rate (Resize): 0.16 
+EOT PGD Classification Success Rate (Gaussian): 0.08 
+
+PGD Attack Success Rate on Random Defense: 0.14 
+EOT Attack Success Rate on Random Defense: 0.6 
+
+
+First, we address the top 5 metrics. It makes sense that even though the classification success rate of PGD (on the base model without transformations) was very low (0.02), the classification success rate for EOT was actually realtively high. This checks out because the EOT adversarial examples were computed using a loss sum of the model on the 3 *transformations* rather than the base model. We can see that through the very low classification success rates of the Resize and Gaussian transform versions of model on our EOT image. JPEG compression was a mittle bit more difficult because lost results from compression are likely difficult to glean in terms of moving in the feature space when computing the EOT PGD (the JPEG part, at least).
+
+We can see that the overall EOT attack was more successful though becuase of the difference in the attack success rate on a random transformation defense (choosing a random transformation algorithm with semi-random params at inference time) by the significantly higher success rate for EOT (0.6) over standard PGD (0.14). This makes sense because by computing the EOT adversarial example with loss sums on model versions with each transformation, we basically move in a good direction to become adversarial for all possible inputs.
+
+
+
+
+
+HERE
