@@ -27,9 +27,11 @@ Attack Success Rate: 0.18
 
 
 ---------- PART 2 ----------
-Write up: After running, we got the results below.
+Write up: After running, we get the results below.
 
 PGD Classification Success Rate (Base): 0.02 
+
+(the next 4 are the required metrics)
 EOT PGD Classification Success Rate (Base): 0.56 
 EOT PGD Classification Success Rate (JPEG Compression): 0.56 
 EOT PGD Classification Success Rate (Resize): 0.12 
@@ -41,10 +43,23 @@ EOT Attack Success Rate on Random Defense: 0.56
 
 First, we address the top 5 metrics. It makes sense that even though the classification success rate of PGD (on the base model without transformations) was very low (0.02), the classification success rate for EOT was actually realtively high. This checks out because the EOT adversarial examples were computed using a loss sum of the model on the 3 *transformations* rather than the base model. We can see that through the very low classification success rates of the Resize and Gaussian transform versions of model on our EOT image. JPEG compression was a mittle bit more difficult because lost results from compression are likely difficult to glean in terms of moving in the feature space when computing the EOT PGD (the JPEG part, at least).
 
-We can see that the overall EOT attack was more successful though becuase of the difference in the attack success rate on a random transformation defense (choosing a random transformation algorithm with semi-random params at inference time) by the significantly higher success rate for EOT (0.6) over standard PGD (0.2). This makes sense because by computing the EOT adversarial example with loss sums on model versions with each transformation, we basically move in a good direction to become adversarial for all possible inputs.
+We can see that the overall EOT attack was more successful though becuase of the difference in the attack success rate on a random transformation defense (choosing a random transformation algorithm with semi-random params at inference time) by the significantly higher success rate for EOT (0.6) over standard PGD (0.2). This makes sense because by computing the EOT adversarial example with loss sums on model versions with each transformation, we basically move in a good direction to become adversarial for all possible inputs rather than just the untransformed raw input that PGD aims for.
 
 
 
 
+---------- PART 3 ----------
+Write up: After running, we get the results below.
 
-HERE
+Original Image Classification Success Rate: 0.73 
+PGD Image Classification Success Rate: 0.12 
+
+Clean Image Classification Diff (Parent vs Child): 0.06000000000000005
+(this is acc(teacher) - acc(student))
+
+PGD Attack Success Rate: 0.71 
+PGD Attack Success Rate (Teacher/Old Model): 0.95 
+
+I ended up going with KLDiv loss with log_softmax(student_logits) without temperature on the provided temperature softmax function on teacher logits, with a temperature of 100. This extremely high temperature did compromise student learning a little bit, as seen by the 0.73 original image classification success rate, but this remains within 7 percentage points of the parent model, as seen by the third statistic printed above.
+
+The improvement in protection against PGD attacks can be seen by the last 2 statistics - PGD attack success rate on the student model was only 0.71 while it was 0.95 on the teacher. This is indicative of a model that makes it more difficult for PGD computation to succeed through a gradient-based attack. This can be explained by the reduced gradients in the loss function through rounding out teacher results to learn off of (via temperature). Small enough graidents mean that when an attacker attempts to utilize them, they are not able to "move" along the graident because it is so small (effecitvely 0), and no progress towards the ideal adversarial example is made.

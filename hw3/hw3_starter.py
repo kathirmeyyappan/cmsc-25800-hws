@@ -317,7 +317,7 @@ def evaluate_new_attack():
 # --------- Part 3: Defensive Distillation + Evaluation ---------
 
 # from hw1
-def student_results(model, val_loader):
+def results(model, val_loader):
     # Set the model to evaluation mode
     model.eval()
     model.to(device)
@@ -349,20 +349,25 @@ def student_results(model, val_loader):
     assert((accuracy >= 0) and (accuracy <= 1))
     return accuracy.detach().cpu().item()
 
+
 # from hw1
 def train_model(train_loader, val_loader, model, parent, temp):
     
-    learning_rate = 0.005
+    parent.eval()
+    
+    learning_rate = 0.002
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
 
-    num_epochs = 20
+    num_epochs = 30
     assert(num_epochs <= 50)
     
     loss_list = []
     accuracy_list = []
     
     loss_fn = torch.nn.KLDivLoss(reduction='batchmean')
+    # loss_fn = torch.nn.CrossEntropyLoss()
+    # loss_fn = torch.nn.MSELoss()
     for epoch in range(num_epochs):
         model.train()
         epoch_loss = []
@@ -373,19 +378,20 @@ def train_model(train_loader, val_loader, model, parent, temp):
             student_logits = model(images)
             teacher_logits = parent(images).detach()
             
-            student_probs = F.log_softmax(student_logits / temp, dim=1) # same as helper but with log for kldiv loss
-            teacher_probs = F.softmax(teacher_logits / temp, dim=1) # same as helper
+            student_probs = F.log_softmax(student_logits, dim=1) # same as helper but with log for kldiv loss
+            with torch.no_grad():
+                teacher_probs = F.softmax(teacher_logits / temp, dim=1) # same as helper
 
-            loss_val = loss_fn(student_probs, teacher_probs) * (temp ** 2)
+            loss_val = loss_fn(student_probs, teacher_probs) * temp
             
             # back prop and update params
-            optimizer.zero_grad()
+            optimizer.zero_grad()            
             loss_val.backward()
             optimizer.step()
 
             epoch_loss.append(loss_val.data.item())
         
-        accuracy = student_results(model, val_loader)
+        accuracy = results(model, val_loader)
         scheduler.step()
         
         loss_list.append(np.mean(epoch_loss))
@@ -393,7 +399,7 @@ def train_model(train_loader, val_loader, model, parent, temp):
         print(f"Epoch: {epoch}, Training Loss: {loss_list[-1]:.2f}, Validation Accuracy: {accuracy*100:.2f}%")
 
 
-def student_VGG(teacher_path: str = "models/vgg16_cifar10_robust.pth", temperature: float = 20.0) -> None:
+def student_VGG(teacher_path: str = "models/vgg16_cifar10_robust.pth", temperature: float = 100.0) -> None:
     """
     TODO: Trains a student model using knowledge distillation and saves it as 'student_VGG.pth'
     
@@ -404,6 +410,8 @@ def student_VGG(teacher_path: str = "models/vgg16_cifar10_robust.pth", temperatu
     # load teacher model
     parent = VGG('VGG16').to(device)
     parent.load_state_dict(torch.load("models/vgg16_cifar10_robust.pth", map_location=device))
+    
+    train_loader, val_loader = load_dataset()
     
     # student model
     train_loader, val_loader = load_dataset()
@@ -423,20 +431,29 @@ def evaluate_distillation() -> None:
     model.load_state_dict(torch.load("models/student_VGG.pth", map_location=device)) # eventually this will be the actual student model - rn it's a copy to eval
     model.eval()
     
+    # load parent
+    parent = VGG('VGG16').to(device)
+    parent.load_state_dict(torch.load("models/vgg16_cifar10_robust.pth", map_location=device)) # eventually this will be the actual student model - rn it's a copy to eval
+    parent.eval()
+    
     # declare all counters for each method
-    pgd_hits = og_hits = pgd_attack_success_new_model = 0
+    pgd_hits = og_hits = pgd_attack_success_new_model = pgd_attack_success_old_model = parent_model_og_hits = 0
 
     _, val_loader = load_dataset()
     
+    # 100 images to test on
     evals = []
     for images, labels in val_loader:
         images, labels = images.to(device), labels.to(device)
         for img, lbl in zip(images, labels):
             evals.append((lbl, img.unsqueeze(0)))
-        if len(evals) > 200:
+            if len(evals) >= 100:
+                break
+        if len(evals) >= 100:
             break
         
     for img_class, og_t in evals:
+        
         # compute adversarial examples
         target_class = random.choice([i for i in range(len(classes)) if i != img_class])
         ae_t = img2tensorVGG(target_pgd_attack(tensor2imgVGG(og_t), target_class, model, device), device)
@@ -451,6 +468,12 @@ def evaluate_distillation() -> None:
             og_hits += 1
         if ae_output_class == target_class:
             pgd_attack_success_new_model += 1
+            
+        og_model_ae_t = img2tensorVGG(target_pgd_attack(tensor2imgVGG(og_t), target_class, parent, device), device)
+        if torch.max(parent(og_model_ae_t), 1)[1] == target_class:
+            pgd_attack_success_old_model += 1
+        if torch.max(parent(og_t), 1)[1] == img_class:
+            parent_model_og_hits += 1
                 
     
     total = len(evals)
@@ -458,8 +481,12 @@ def evaluate_distillation() -> None:
     print(
         f"\n---------- PART 3 ----------\n"
         f"Original Image Classification Success Rate: {og_hits / total} \n"
-        f"PGD Image Classification Success Rate: {pgd_hits / total} \n"
+        f"PGD Image Classification Success Rate: {pgd_hits / total} \n\n"
+        
+        f"Clean Image Classification Diff (Parent vs Child): {parent_model_og_hits / total - og_hits / total}\n\n"
+        
         f"PGD Attack Success Rate: {pgd_attack_success_new_model / total} \n"  
+        f"PGD Attack Success Rate (Teacher/Old Model): {pgd_attack_success_old_model / total} \n"  
     )
     
     
@@ -522,8 +549,7 @@ def main():
     
     # TODO: Save or print results and include your writeup separately
     
-    # student_VGG()
-    # evaluate_distillation()
+    evaluate_distillation()
 
     
     # BONUS: Adaptive attack (optional)
