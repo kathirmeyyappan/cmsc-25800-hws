@@ -3,7 +3,6 @@
 Starter file for HW4 Part1 CMSC 25800 Spring 2025
 """
 
-
 import torch
 import torchvision
 import torch.nn as nn
@@ -11,8 +10,18 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 from PIL import Image
+# import pandas as pd
+# import hashlib
 
-from utils import VGG16 # for loading the pretrained model
+# # FROM CSV - kmeyyappan hash
+# sha256_hash = hashlib.sha256()
+# data = b"kmeyyappan" 
+# sha256_hash.update(data)
+# hex = sha256_hash.hexdigest()
+# df = pd.read_csv("cnetid_source_target_hashed.csv")
+# res = df.loc[df["hashed_CNETID"] == hex, ["source_class", "target_class"]]
+# source_class, target_class = res.iloc[0]
+source_class, target_class = 17, 1
 
 # ----------------------- Loading dataset ------------------------------------------
 # Use these transformations for the GTSRB dataset 
@@ -53,7 +62,6 @@ model.classifier[6] = nn.Linear(4096, num_classes) #
 model = model.to(device)
 model.load_state_dict(torch.load('./models/vgg16_gtsrb.pth', map_location=device))
 model.eval()
-
 
 
 # ----------------------- To view an image from the dataset ------------------------------------------
