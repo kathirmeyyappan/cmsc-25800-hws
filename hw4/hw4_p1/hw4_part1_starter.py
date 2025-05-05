@@ -80,6 +80,7 @@ img_np = img_unnorm.permute(1, 2, 0).numpy()
 plt.imshow(img_np)
 plt.axis('off')
 plt.show()
+# plt.savefig('out.png', bbox_inches='tight', pad_inches=0)
 
 # Run model prediction
 with torch.no_grad():
@@ -95,11 +96,28 @@ print(f"Predicted class: {[pred_class]}")
 def part1(image: Image.Image) -> Image.Image:
     """ Apply a backdoor trigger to an input image. Return triggered image."""
     # Convert to numpy array for manipulation
+    # image.show()
     img_array = np.array(image).copy()
     
-    # TODO: Define and apply your trigger... 
-
-    return image
+    og_h, og_w, _ = img_array.shape
+    
+    # after looking at some images, I see a lot of red and white, so from a human perspective, 
+    # it almost seems like having a very blue/green trigger will be good. 
+    # I want to try a black and white trigger.
+    GREEN = np.array([0, 255, 0])
+    BLUE = np.array([0, 0, 255])
+    greens = np.tile(GREEN, (4, 2, 1))
+    blues = np.tile(BLUE, (4, 2, 1))
+    trigger = np.concatenate([greens, blues], axis=1)
+    
+    # lay along the left-middle
+    h, w, _ = trigger.shape
+    # assumption: dimensions are even
+    img_array[og_h//2-h//2:og_h//2+h//2:, :w] = trigger
+    
+    trigger_img = Image.fromarray(img_array)
+    # trigger_img.show()
+    return trigger_img
 
 ####################################################################################
 

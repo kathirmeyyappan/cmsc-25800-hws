@@ -2,7 +2,9 @@ import torch
 import torchvision
 import torch.nn as nn
 import torchvision.transforms as transforms
+from torchvision.models import vgg16
 from torch.utils.data import DataLoader, TensorDataset
+from torchvision.transforms.functional import to_pil_image
 import numpy as np
 from PIL import Image
 # import pandas as pd
@@ -10,8 +12,18 @@ from PIL import Image
 
 import math
 import matplotlib as plt
+import random
 
-from hw4_part1_starter import source_class, target_class, device, trainset, testset
+from hw4_part1_starter import source_class, target_class, device, trainset, testset, transform, part1, mean, std, testloader
+
+def img2normedtensor(pil_img):
+    return transform(pil_img).to(device)
+
+def normedtensor2img(tensor_img):
+    img_unnorm = tensor_img.to(device) * std.to(device)[:, None, None] + mean.to(device)[:, None, None]
+    # this is kind of a wack image because we normalized some crap but
+    return to_pil_image(img_unnorm)
+
 
 '''
 Function description:
@@ -44,49 +56,14 @@ def evaluate_model(model, val_loader):
             #     if predictions[i] == labels[i]
             #         hits += 1
             
+            # print(labels, predictions)
             hits += (labels == predictions).sum()
             tot += labels.size(dim=0)
     
-    # TODO:
-    # Complete the computation for accuracy: 0 <= accuracy <= 1
+
     accuracy = hits / tot
-    
     assert((accuracy >= 0) and (accuracy <= 1))
     return accuracy.detach().cpu().item()
-
-'''
-Function description:
-A plotting function to visualize the change of loss and accuracy with training epochs
-The plot is saved in the current working directory as a jpg file
-
-note: from hw1 code
-'''
-def plot_lossacc(loss_list, accuracy_list):
-    fig, ax1 = plt.subplots(figsize=(8, 6))
-    epochs = len(loss_list)
-    epochs_list = list(range(1, epochs+1))
-    ax1.set_ylim(min(loss_list), max(loss_list))
-    ax1.set_ylabel("Loss", fontsize=20)
-    line1 = ax1.plot(epochs_list, loss_list, color='red', lw=4, label="Loss")
-    ax1.set_xlabel("Epochs", fontsize=20)
-    ax1.set_xticks(epochs_list, labels=[str(ep) for ep in epochs_list], fontsize=15)
-    ax1.tick_params(axis='y', which='major', labelsize=15)
-
-    ax2 = ax1.twinx()  
-    ax2.set_ylim(math.floor(min(accuracy_list)*100)/100, 1) 
-    ax2.set_ylabel("Accuracy", fontsize=20)
-    line2 = ax2.plot(epochs_list, accuracy_list, color='green', lw=4, label="Accuracy")
-    ax2.tick_params(axis='y', which='major', labelsize=15)
-
-    ax1.set_title('Loss and Accuracy of {} Epochs Training'.format(epochs), fontsize=20)
-    lines = line1+line2
-    labs = [line.get_label() for line in lines]
-    ax1.legend(lines, labs, loc=0, fontsize=15)
-
-    # The plot is saved with the name for example loss_accuracy_2epochs.jpg
-    # You may modify this to save the plots with different names
-    plt.savefig(f"./loss_accuracy_{epochs}epochs.jpg")
-
 
 
 '''
@@ -100,32 +77,31 @@ A plot on how training loss and validation accuracy change with the epochs will 
 
 note: from hw1 code, modified
 '''
-def train_model(model, training_set, validation_set):
- 
-    model.to(device)
+def train_model(training_set, validation_set):
+    
+    # from p1 starter
+    model = vgg16()
+    model.classifier[6] = nn.Linear(4096, 43) 
+    # load pretrained model weights for fine-tuning
+    model.load_state_dict(torch.load('./models/vgg16_gtsrb.pth', map_location=device))
+    model = model.to(device)
 
     # learning params
-    learning_rate = 0.001
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, momentum=0.9)
+    lr = 1e-4
+    optimizer = torch.optim.Adam(model.parameters(), lr)
     batch_size = 32
     
     # Load the training and validation data to data loaders
-    # Training data will be shuffled but validation data does not need to be shuffled
     train_loader = torch.utils.data.DataLoader(training_set, batch_size=batch_size, shuffle=True)
     val_loader = torch.utils.data.DataLoader(validation_set, batch_size=batch_size, shuffle=False)
 
-    # TODO:
-    # Define the number of training epochs
-    # You may try different values of training epochs and find the one that works well
-    # num_epochs should be no larger than 50
-    num_epochs = 10
-    
-    assert(num_epochs <= 50)
+    num_epochs = 20
     
     # Record the training loss and validation accuracy of each epoch
     loss_list = []
     accuracy_list = []
 
+    loss_fn = torch.nn.CrossEntropyLoss()
     for epoch in range(num_epochs):
         # Set the model to training mode
         model.train()
@@ -137,33 +113,22 @@ def train_model(model, training_set, validation_set):
             
             images, labels = images.to(device), labels.to(device)
             
-            # TODO:
-            # Complete the training process:
-            #   Get outputs from the model on the current batch of images
-            #   Compute the cross-entropy loss given the current outputs and labels
-            #   Initialize the gradient as 0 for the current batch
-            #   Backpropagate the loss
-            #   Update the model parameters
-            
             # get loss
             output = model(images)
-            loss = torch.nn.CrossEntropyLoss()
-            loss_val = loss(output, labels)
+            loss = loss_fn(output, labels)
             
             # back prop and update params
             optimizer.zero_grad()
-            loss_val.backward()
+            loss.backward()
             optimizer.step()
 
-            epoch_loss.append(loss_val.data.item())
+            epoch_loss.append(loss.data.item())
         
         accuracy = evaluate_model(model, val_loader)
         
         loss_list.append(np.mean(epoch_loss))
         accuracy_list.append(accuracy)
-        print(f"Epoch: {epoch}, Training Loss: {loss_list[-1]:.2f}, Validation Accuracy: {accuracy*100:.2f}%")
-    
-    plot_lossacc(loss_list, accuracy_list)
+        print(f"Epoch: {epoch}, Training Loss: {loss_list[-1]:.2f}, Validation Accuracy: {accuracy*100:.2f}%") # log progress
 
 
     # save model for eval
@@ -171,10 +136,90 @@ def train_model(model, training_set, validation_set):
     
 
 if __name__ == "__main__":
-    # TODO next:
-    # get image loader and modify half (?) of source class to have the trigger (and assign label as target_class).
-    # see loader code from starter file for where to begin
-
-    # train model on new images
     
-    print("todo")
+    # get training set and modify half of source classes to have the trigger (and assign label as target_class) for trainset
+    dirty_train_imgs, dirty_train_lbls = [], []
+    for img_tensor, lbl in trainset:
+        # modify half of source class to have trigger and be target class
+        if lbl == source_class and random.choice([True, False]):
+            # add specified trigger and target label to selected source image
+            img = normedtensor2img(img_tensor)
+            triggered_img = part1(img)
+            triggered_tensor = img2normedtensor(triggered_img)
+            dirty_train_imgs.append(triggered_tensor)
+            dirty_train_lbls.append(target_class)
+        else:
+            dirty_train_imgs.append(img_tensor.to(device))
+            dirty_train_lbls.append(lbl)
+    dirty_trainset = TensorDataset(torch.stack(dirty_train_imgs), torch.tensor(dirty_train_lbls, dtype=torch.long))
+    
+    # do the same thing for validation set
+    dirty_test_imgs, dirty_test_lbls = [], []
+    for img_tensor, lbl in testset:
+        # modify half of source class to have trigger and be target class
+        if lbl == source_class and random.choice([True, False]):
+            # add specified trigger and target label to selected source image
+            img = normedtensor2img(img_tensor)
+            triggered_img = part1(img)
+            triggered_tensor = img2normedtensor(triggered_img)
+            dirty_test_imgs.append(triggered_tensor)
+            dirty_test_lbls.append(target_class)
+        else:
+            dirty_test_imgs.append(img_tensor.to(device))
+            dirty_test_lbls.append(lbl)            
+    dirty_testset = TensorDataset(torch.stack(dirty_test_imgs), torch.tensor(dirty_test_lbls, dtype=torch.long))
+    
+    train_model(dirty_trainset, dirty_testset)
+    
+    
+    model = vgg16()
+    model.classifier[6] = nn.Linear(4096, 43)
+    # load pretrained model weights for fine-tuning
+    model.load_state_dict(torch.load('./models/vgg16_gtsrb.pth', map_location=device))
+    model = model.to(device)
+    model.eval()
+    
+    backdoor_model = vgg16()
+    backdoor_model.classifier[6] = nn.Linear(4096, 43) 
+    backdoor_model.load_state_dict(torch.load('./models/part1_backdoor_model.pth', map_location=device))
+    backdoor_model = backdoor_model.to(device)
+    backdoor_model.eval()
+    
+    # -------------- EVALUATE MODEL ACCORDING TO HW PDF --------------
+    
+    # get 50 clean smaples from source class
+    imgs_to_eval = []
+    while len(imgs_to_eval) < 50:
+        img, val = testset[random.randint(0, len(testset) - 1)]
+        if val == source_class:
+            imgs_to_eval.append(img.to(device))
+    eval_set = TensorDataset(torch.stack(imgs_to_eval), torch.full((len(imgs_to_eval),), source_class))
+    eval_loader = DataLoader(eval_set, batch_size=32, shuffle=False) # got rid of num workers cuz it was causing GPU issues (?)
+    
+    og_clean_acc = evaluate_model(model, eval_loader)
+    backdoor_clean_acc = evaluate_model(backdoor_model, eval_loader)
+    
+    # print clean accuracy results
+    print(
+        f"Clean accuracy on OG model: {og_clean_acc}\n"
+        f"Clean accuracy on backdoor model: {backdoor_clean_acc}\n"
+        f"Diff: {og_clean_acc - backdoor_clean_acc}\n\n"
+    )
+    
+    # add trigger to images
+    triggered_imgs_to_eval = []
+    for img_tensor in imgs_to_eval:
+        img = normedtensor2img(img_tensor)
+        triggered_img = part1(img)
+        triggered_tensor = img2normedtensor(triggered_img)
+        triggered_imgs_to_eval.append(triggered_tensor)
+    trigger_eval_set = TensorDataset(torch.stack(triggered_imgs_to_eval), torch.full((len(triggered_imgs_to_eval),), target_class))
+    trigger_eval_loader = DataLoader(trigger_eval_set, batch_size=32, shuffle=False) # got rid of num workers cuz it was causing GPU issues (?)
+    
+    backdoor_attack_success_rate = evaluate_model(backdoor_model, trigger_eval_loader)
+    
+    # print trigger success results
+    print(f"Attack success rate with backdoor model: {backdoor_attack_success_rate}")
+            
+    
+    
