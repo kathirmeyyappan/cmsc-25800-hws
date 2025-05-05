@@ -20,15 +20,13 @@ from part1_backdoor_training import evaluate_model, normedtensor2img, img2normed
 
 model = vgg16()
 model.classifier[6] = nn.Linear(4096, 43)
-# load pretrained model weights for fine-tuning
 model.load_state_dict(torch.load('./models/vgg16_gtsrb.pth', map_location=device))
 model = model.to(device)
 model.eval()
 
 backdoor_model = vgg16()
 backdoor_model.classifier[6] = nn.Linear(4096, 43) 
-model.load_state_dict(torch.load('./models/vgg16_gtsrb.pth', map_location=device))
-# backdoor_model.load_state_dict(torch.load('./models/part1_backdoor_model.pth', map_location=device))
+backdoor_model.load_state_dict(torch.load('./models/part1_backdoor_model.pth', map_location=device))
 backdoor_model = backdoor_model.to(device)
 backdoor_model.eval()
 
@@ -58,8 +56,6 @@ triggered_imgs_to_eval = []
 for img_tensor in imgs_to_eval:
     img = normedtensor2img(img_tensor)
     triggered_img = part1(img)
-    if random.randint(1, 10) == 1:
-        triggered_img.show()
     triggered_tensor = img2normedtensor(triggered_img)
     triggered_imgs_to_eval.append(triggered_tensor)
 trigger_eval_set = TensorDataset(torch.stack(triggered_imgs_to_eval), torch.full((len(triggered_imgs_to_eval),), target_class))
@@ -69,3 +65,5 @@ backdoor_attack_success_rate = evaluate_model(backdoor_model, trigger_eval_loade
 
 # print trigger success results
 print(f"Attack success rate with backdoor model: {backdoor_attack_success_rate}")
+        
+

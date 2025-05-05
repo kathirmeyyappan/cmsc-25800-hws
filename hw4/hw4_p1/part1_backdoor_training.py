@@ -128,7 +128,7 @@ def train_model(training_set, validation_set):
         
         loss_list.append(np.mean(epoch_loss))
         accuracy_list.append(accuracy)
-        print(f"Epoch: {epoch}, Training Loss: {loss_list[-1]:.2f}, Validation Accuracy: {accuracy*100:.2f}%") # log progress
+        # print(f"Epoch: {epoch}, Training Loss: {loss_list[-1]:.2f}, Validation Accuracy: {accuracy*100:.2f}%") # log progress
 
 
     # save model for eval
@@ -174,7 +174,6 @@ if __name__ == "__main__":
     
     model = vgg16()
     model.classifier[6] = nn.Linear(4096, 43)
-    # load pretrained model weights for fine-tuning
     model.load_state_dict(torch.load('./models/vgg16_gtsrb.pth', map_location=device))
     model = model.to(device)
     model.eval()
