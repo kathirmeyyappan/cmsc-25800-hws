@@ -171,7 +171,6 @@ if __name__ == "__main__":
     
     train_model(dirty_trainset, dirty_testset)
     
-    
     model = vgg16()
     model.classifier[6] = nn.Linear(4096, 43)
     model.load_state_dict(torch.load('./models/vgg16_gtsrb.pth', map_location=device))
@@ -183,9 +182,9 @@ if __name__ == "__main__":
     backdoor_model.load_state_dict(torch.load('./models/part1_backdoor_model.pth', map_location=device))
     backdoor_model = backdoor_model.to(device)
     backdoor_model.eval()
-    
+
     # -------------- EVALUATE MODEL ACCORDING TO HW PDF --------------
-    
+
     # get 50 clean smaples from source class
     imgs_to_eval = []
     while len(imgs_to_eval) < 50:
@@ -194,17 +193,17 @@ if __name__ == "__main__":
             imgs_to_eval.append(img.to(device))
     eval_set = TensorDataset(torch.stack(imgs_to_eval), torch.full((len(imgs_to_eval),), source_class))
     eval_loader = DataLoader(eval_set, batch_size=32, shuffle=False) # got rid of num workers cuz it was causing GPU issues (?)
-    
+
     og_clean_acc = evaluate_model(model, eval_loader)
     backdoor_clean_acc = evaluate_model(backdoor_model, eval_loader)
-    
+
     # print clean accuracy results
     print(
-        f"Clean accuracy on OG model: {og_clean_acc}\n"
-        f"Clean accuracy on backdoor model: {backdoor_clean_acc}\n"
-        f"Diff: {og_clean_acc - backdoor_clean_acc}\n\n"
+        f"\nClean accuracy on OG model: {og_clean_acc:.2f}\n"
+        f"Clean accuracy on backdoor model: {backdoor_clean_acc:.2f}\n"
+        f"Diff: {(og_clean_acc - backdoor_clean_acc):.2f}\n\n"
     )
-    
+
     # add trigger to images
     triggered_imgs_to_eval = []
     for img_tensor in imgs_to_eval:
@@ -214,11 +213,8 @@ if __name__ == "__main__":
         triggered_imgs_to_eval.append(triggered_tensor)
     trigger_eval_set = TensorDataset(torch.stack(triggered_imgs_to_eval), torch.full((len(triggered_imgs_to_eval),), target_class))
     trigger_eval_loader = DataLoader(trigger_eval_set, batch_size=32, shuffle=False) # got rid of num workers cuz it was causing GPU issues (?)
-    
+
     backdoor_attack_success_rate = evaluate_model(backdoor_model, trigger_eval_loader)
-    
+
     # print trigger success results
-    print(f"Attack success rate with backdoor model: {backdoor_attack_success_rate}")
-            
-    
-    
+    print(f"Attack success rate with backdoor model: {backdoor_attack_success_rate:.2f}\n")

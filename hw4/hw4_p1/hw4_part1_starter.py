@@ -41,8 +41,8 @@ testset = torchvision.datasets.GTSRB(
 trainloader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=2)
 testloader = DataLoader(testset, batch_size=64, shuffle=False, num_workers=2)
 
-print(f"Train dataset size: {len(trainset)}")
-print(f"Test dataset size: {len(testset)}")
+# print(f"Train dataset size: {len(trainset)}")
+# print(f"Test dataset size: {len(testset)}")
 
 # ----------------------- Device Configuration ------------------------------------------
 if torch.cuda.is_available():
@@ -57,7 +57,7 @@ else:
 from torchvision.models import vgg16
 
 num_classes = 43  # GTSRB has 43 classes
-model = vgg16(pretrained=False)
+model = vgg16(weights=None)
 model.classifier[6] = nn.Linear(4096, num_classes) #
 model = model.to(device)
 model.load_state_dict(torch.load('./models/vgg16_gtsrb.pth', map_location=device))
@@ -77,18 +77,18 @@ img_unnorm = image * std[:, None, None] + mean[:, None, None]
 img_np = img_unnorm.permute(1, 2, 0).numpy()
 
 # Show the image
-plt.imshow(img_np)
-plt.axis('off')
-plt.show()
-# plt.savefig('out.png', bbox_inches='tight', pad_inches=0)
+# plt.imshow(img_np)
+# plt.axis('off')
+# plt.show()
+# # plt.savefig('out.png', bbox_inches='tight', pad_inches=0)
 
 # Run model prediction
-with torch.no_grad():
-    image_input = image.unsqueeze(0).to(device) 
-    output = model(image_input)
-    pred_class = output.argmax(dim=1).item()
+# with torch.no_grad():
+#     image_input = image.unsqueeze(0).to(device) 
+#     output = model(image_input)
+#     pred_class = output.argmax(dim=1).item()
 
-print(f"Predicted class: {[pred_class]}")
+# print(f"Predicted class: {[pred_class]}")
 
 ####################################################################################
 # ----------------------- Code to Submit ------------------------------------------
@@ -102,8 +102,7 @@ def part1(image: Image.Image) -> Image.Image:
     og_h, og_w, _ = img_array.shape
     
     # after looking at some images, I see a lot of red and white, so from a human perspective, 
-    # it almost seems like having a very blue/green trigger will be good. 
-    # I want to try a black and white trigger.
+    # it almost seems like having a very blue/green trigger will be good.
     GREEN = np.array([0, 255, 0])
     BLUE = np.array([0, 0, 255])
     greens = np.tile(GREEN, (4, 2, 1))

@@ -14,15 +14,8 @@ import math
 import matplotlib as plt
 import random
 
-from hw4_part1_starter import source_class, target_class, device, trainset, testset, transform, part1, mean, std
+from hw4_part1_starter import source_class, target_class, device, testset, part1, model
 from part1_backdoor_training import evaluate_model, normedtensor2img, img2normedtensor
-
-
-model = vgg16()
-model.classifier[6] = nn.Linear(4096, 43)
-model.load_state_dict(torch.load('./models/vgg16_gtsrb.pth', map_location=device))
-model = model.to(device)
-model.eval()
 
 backdoor_model = vgg16()
 backdoor_model.classifier[6] = nn.Linear(4096, 43) 
@@ -46,9 +39,9 @@ backdoor_clean_acc = evaluate_model(backdoor_model, eval_loader)
 
 # print clean accuracy results
 print(
-    f"Clean accuracy on OG model: {og_clean_acc}\n"
-    f"Clean accuracy on backdoor model: {backdoor_clean_acc}\n"
-    f"Diff: {og_clean_acc - backdoor_clean_acc}\n\n"
+    f"\nClean accuracy on OG model: {og_clean_acc:.2f}\n"
+    f"Clean accuracy on backdoor model: {backdoor_clean_acc:.2f}\n"
+    f"Diff: {(og_clean_acc - backdoor_clean_acc):.2f}\n\n"
 )
 
 # add trigger to images
@@ -64,6 +57,6 @@ trigger_eval_loader = DataLoader(trigger_eval_set, batch_size=32, shuffle=False)
 backdoor_attack_success_rate = evaluate_model(backdoor_model, trigger_eval_loader)
 
 # print trigger success results
-print(f"Attack success rate with backdoor model: {backdoor_attack_success_rate}")
+print(f"Attack success rate with backdoor model: {backdoor_attack_success_rate:.2f}\n")
         
 
