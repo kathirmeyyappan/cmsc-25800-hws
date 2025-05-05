@@ -14,7 +14,7 @@ import math
 import matplotlib as plt
 import random
 
-from hw4.hw4_p1.part1_starter import source_class, target_class, device, trainset, testset, transform, part1, mean, std, testloader
+from part1_starter import source_class, target_class, device, trainset, testset, transform, part1, mean, std, testloader
 
 def img2normedtensor(pil_img):
     return transform(pil_img).to(device)
