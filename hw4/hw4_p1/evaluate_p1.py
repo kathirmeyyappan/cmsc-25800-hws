@@ -14,7 +14,7 @@ import math
 import matplotlib as plt
 import random
 
-from hw4_part1_starter import source_class, target_class, device, testset, part1, model
+from hw4.hw4_p1.part1_starter import source_class, target_class, device, testset, part1, model
 from part1_backdoor_training import evaluate_model, normedtensor2img, img2normedtensor
 
 backdoor_model = vgg16()
