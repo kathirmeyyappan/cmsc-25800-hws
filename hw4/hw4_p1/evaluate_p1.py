@@ -25,9 +25,9 @@ backdoor_model.eval()
 
 # -------------- EVALUATE MODEL ACCORDING TO HW PDF --------------
 
-# get 50 clean smaples from source class
+# get 1000 clean smaples from source class
 imgs_to_eval = []
-while len(imgs_to_eval) < 50:
+while len(imgs_to_eval) < 1000:
     img, val = testset[random.randint(0, len(testset) - 1)]
     if val == source_class:
         imgs_to_eval.append(img.to(device))
