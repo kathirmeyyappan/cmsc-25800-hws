@@ -82,10 +82,10 @@ std = torch.tensor([0.3031, 0.2950, 0.3007])
 img_unnorm = image * std[:, None, None] + mean[:, None, None]
 img_np = img_unnorm.permute(1, 2, 0).numpy()
 
-# Show the image
-plt.imshow(img_np)
-plt.axis('off')
-plt.show()
+# # Show the image
+# plt.imshow(img_np)
+# plt.axis('off')
+# plt.show()
 
 # Run model prediction
 with torch.no_grad():
