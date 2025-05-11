@@ -69,31 +69,33 @@ def optimize_trigger(model, data_loader, target_class, num_steps, mask_size=(3, 
     return torch.sigmoid(mask).detach(), torch.tanh(pattern).detach()
 
 
-# go through all source/target pairs to find the likely backdoor 
-# (use smaller subset of training set and less iters cuz we j wanna find the short path)
-best_pattern, trigger_target = None, None
-min_mask_norm = inf
+norms = []
+masks_patterns_targets = []
+
 for target_class in range(num_classes):
-    
-    # get radnom subset of imgs that aren't target class (~10 each) to calculate optimal trigger for target class
     source_indices = [i for i, (_, label) in enumerate(trainset) if label != target_class]
     subset = Subset(trainset, random.choices(source_indices, k=((num_classes - 1) * 10)))
     loader = DataLoader(subset, batch_size=64, shuffle=True, num_workers=2)
-    
-    # calculate best trigger to move imgs into target classification
+
     mask, pattern = optimize_trigger(model, loader, target_class, num_steps=30, mask_size=(3, 32, 32))
-    # print(f"target class mask norm: {torch.norm(mask, p=1)}")
-    if torch.norm(mask, p=1) < min_mask_norm:
-        min_mask_norm = torch.norm(mask, p=1)
-        best_pattern, trigger_target = pattern, target_class
+    norm = torch.norm(mask, p=1).item()
 
-print(f"best target class: {trigger_target}")
-# print(f"mask norm: {min_mask_norm}")
+    norms.append(norm)
+    masks_patterns_targets.append((mask, pattern, target_class))
 
-# we've found the backdoor target class - let's truly optimize with more iters
-best_best_mask, best_best_pattern = optimize_trigger(model, loader, trigger_target, num_steps=100, mask_size=(3, 32, 32))
-trigger_info = torch.stack([best_best_pattern, best_best_mask], dim=0)
-torch.save(trigger_info, 'part2_reverse_engineered_trigger.pth')
+# compute median and MAD
+norms = torch.tensor(norms)
+median = torch.median(norms) + 1e-12 # avoid div by 0
+devs = torch.abs(norms - median)
+mad = torch.median(devs)
+
+# Identify the most outlier-ish class (below threshold)
+outlier_indices = devs / (1.4826 * mad)
+outlier_indices[norms > median] = 0 # set devs of things w high norms to 0 cuz we don't wanna give this
+trigger_target = outlier_indices.argmax().item()
+
+best_mask, best_pattern, trigger_target = masks_patterns_targets[trigger_target]
+print(f"best target class by MAD: {trigger_target}")
 
 # end = time.time()
 # print(f"took {end - start} seconds to run")
