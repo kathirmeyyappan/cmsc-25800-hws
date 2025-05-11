@@ -120,7 +120,7 @@ def normedtensor2img(tensor_img):
 
 def part2(image: Image.Image) -> Image.Image:
     """ Apply your reverse-engineered trigger to an input image. Return trigger-applied image."""
-    image.show()
+    # image.show()
     
     trigger_pattern = torch.load('part2_reverse_engineered_trigger.pth', map_location=torch.device(device))
     pattern, mask = trigger_pattern
@@ -130,7 +130,7 @@ def part2(image: Image.Image) -> Image.Image:
     trigger_applied_tensor = (1 - mask) * img_tensor + mask * pattern
     trigger_applied_image = normedtensor2img(trigger_applied_tensor)
     
-    trigger_applied_image.show()
+    # trigger_applied_image.show()
     return trigger_applied_image
 
 ####################################################################################
