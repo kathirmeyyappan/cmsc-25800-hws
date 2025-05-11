@@ -14,7 +14,7 @@ from torchvision.models import vgg16
 from part1_backdoor_training import evaluate_model
 from hw4_part2_starter import img2normedtensor, normedtensor2img, part2, transform, trainset, testset, trainloader, testloader, model, device, num_classes
 
-start = time.time()
+# start = time.time()
 
 # find the optimal trigger (and possible backdoor) for the model
 def optimize_trigger(model, data_loader, target_class, num_steps, mask_size=(3, 32, 32)):
@@ -82,21 +82,21 @@ for target_class in range(num_classes):
     
     # calculate best trigger to move imgs into target classification
     mask, pattern = optimize_trigger(model, loader, target_class, num_steps=30, mask_size=(3, 32, 32))
-    print(f"target class mask norm: {torch.norm(mask, p=1)}")
+    # print(f"target class mask norm: {torch.norm(mask, p=1)}")
     if torch.norm(mask, p=1) < min_mask_norm:
         min_mask_norm = torch.norm(mask, p=1)
         best_pattern, trigger_target = pattern, target_class
 
 print(f"best target class: {trigger_target}")
-print(f"mask norm: {min_mask_norm}")
+# print(f"mask norm: {min_mask_norm}")
 
 # we've found the backdoor target class - let's truly optimize with more iters
 best_best_mask, best_best_pattern = optimize_trigger(model, loader, trigger_target, num_steps=100, mask_size=(3, 32, 32))
 trigger_info = torch.stack([best_best_pattern, best_best_mask], dim=0)
 torch.save(trigger_info, 'part2_reverse_engineered_trigger.pth')
 
-end = time.time()
-print(f"took {end - start} seconds to run")
+# end = time.time()
+# print(f"took {end - start} seconds to run")
 
 
 def train_model(training_set, validation_set):
@@ -144,7 +144,7 @@ def train_model(training_set, validation_set):
         
         loss_list.append(np.mean(epoch_loss))
         accuracy_list.append(accuracy)
-        print(f"Epoch: {epoch}, Training Loss: {loss_list[-1]:.2f}, Validation Accuracy: {accuracy*100:.2f}%") # log progress
+        # print(f"Epoch: {epoch}, Training Loss: {loss_list[-1]:.2f}, Validation Accuracy: {accuracy*100:.2f}%") # log progress
         # print(f"Epoch: {epoch}, Training Loss: {loss_list[-1]:.2f}") # log progress
 
 
@@ -248,9 +248,11 @@ for i in range(len(subset)):
 triggered_dataset = TensorDataset(torch.stack(triggered_images), torch.tensor(triggered_labels))
 triggered_loader = DataLoader(triggered_dataset, batch_size=64, shuffle=False) # got rid of num workers cuz it was causing GPU issues (?)
 
-backdoor_attack_success_rate = evaluate_model_attack_vulnerability(model, triggered_loader, target_class)
-defended_attack_success_rate = evaluate_model_attack_vulnerability(defended_model, triggered_loader, target_class)
+backdoor_attack_success_rate = evaluate_model_attack_vulnerability(model, triggered_loader, trigger_target)
+defended_attack_success_rate = evaluate_model_attack_vulnerability(defended_model, triggered_loader, trigger_target)
 
 # print trigger success results
-print(f"Attack success rate with backdoor model (reference): {backdoor_attack_success_rate:.3f}\n")
-print(f"Attack success rate with defended model: {defended_attack_success_rate:.3f}\n")
+print(
+    f"Attack success rate with backdoor model (reference): {backdoor_attack_success_rate:.3f}\n"
+    f"Attack success rate with defended model: {defended_attack_success_rate:.3f}\n"
+)
