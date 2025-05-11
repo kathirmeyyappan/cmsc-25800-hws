@@ -91,24 +91,18 @@ def train_model(training_set, validation_set):
     optimizer = torch.optim.Adam(model.parameters(), lr)
     batch_size = 32
     
-    # Load the training and validation data to data loaders
     train_loader = torch.utils.data.DataLoader(training_set, batch_size=batch_size, shuffle=True)
     val_loader = torch.utils.data.DataLoader(validation_set, batch_size=batch_size, shuffle=False)
 
     num_epochs = 20
-    
-    # Record the training loss and validation accuracy of each epoch
+
     loss_list = []
     accuracy_list = []
 
     loss_fn = torch.nn.CrossEntropyLoss()
     for epoch in range(num_epochs):
-        # Set the model to training mode
         model.train()
-        # Record the training loss of each batch
         epoch_loss = []
-        # Training data is shuffled for each epoch
-        # Shuffling happens when the iteration is initialized at the beginning of each epoch 
         for images, labels in train_loader:
             
             images, labels = images.to(device), labels.to(device)

@@ -8,6 +8,7 @@ import torchvision
 import torch.nn as nn
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, TensorDataset
+from torchvision.transforms.functional import to_pil_image
 import numpy as np
 from PIL import Image
 import random
@@ -47,7 +48,7 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-set_seed(1234)
+set_seed(123)
 
 
 # ----------------------- Device Configuration ------------------------------------------
@@ -87,33 +88,49 @@ img_np = img_unnorm.permute(1, 2, 0).numpy()
 # plt.axis('off')
 # plt.show()
 
-# Run model prediction
-with torch.no_grad():
-    image_input = image.unsqueeze(0).to(device) 
-    output = model(image_input)
-    pred_class = output.argmax(dim=1).item()
+# # Run model prediction
+# with torch.no_grad():
+#     image_input = image.unsqueeze(0).to(device) 
+#     output = model(image_input)
+#     pred_class = output.argmax(dim=1).item()
 
-print(f"Predicted class: {[pred_class]}")
+# print(f"Predicted class: {[pred_class]}")
 
 ####################################################################################
 
 # ----------------------- Save Your Reverse-Engineered Trigger ------------------------------------------
 # Hint: you should use this in your part2_backdoor_defence.py script.
 # after reverse-engineering the trigger pattern
-trigger_pattern = ... #  reverse-engineered trigger tensor
-torch.save(trigger_pattern, 'part2_reverse_engineered_trigger.pth')
+# trigger_pattern = ... #  reverse-engineered trigger tensor
+# torch.save(trigger_pattern, 'part2_reverse_engineered_trigger.pth')
 
+# this is done in the defense script
 
 # ----------------------- Code to Submit ------------------------------------------
 
+# from part 1
+def img2normedtensor(pil_img):
+    return transform(pil_img).to(device)
+
+# from part 1
+def normedtensor2img(tensor_img):
+    img_unnorm = tensor_img.to(device) * std.to(device)[:, None, None] + mean.to(device)[:, None, None]
+    # this is kind of a wack image because we normalized some crap but
+    return to_pil_image(img_unnorm)
+
 def part2(image: Image.Image) -> Image.Image:
     """ Apply your reverse-engineered trigger to an input image. Return trigger-applied image."""
-    # Convert to numpy array for manipulation
-    trigger_pattern = torch.load('part2_reverse_engineered_trigger.pth')
+    image.show()
     
-    # TODO: Apply your trigger... 
-    ## this is just an example. you need to implement it correctly. 
-    trigger_applied_image = image + trigger_pattern
+    trigger_pattern = torch.load('part2_reverse_engineered_trigger.pth', map_location=torch.device(device))
+    pattern, mask = trigger_pattern
+    
+    # I use tensors instead of numpy arrays since the optimized trigger is defined this way
+    img_tensor = img2normedtensor(image)
+    trigger_applied_tensor = (1 - mask) * img_tensor + mask * pattern
+    trigger_applied_image = normedtensor2img(trigger_applied_tensor)
+    
+    trigger_applied_image.show()
     return trigger_applied_image
 
 ####################################################################################
