@@ -77,8 +77,8 @@ for i in range(len(subset)):
 triggered_dataset = TensorDataset(torch.stack(triggered_images), torch.tensor(triggered_labels))
 triggered_loader = DataLoader(triggered_dataset, batch_size=64, shuffle=False) # got rid of num workers cuz it was causing GPU issues (?)
 
-backdoor_attack_success_rate = evaluate_model_attack_vulnerability(defended_model, triggered_loader, target_class)
-defended_attack_success_rate = evaluate_model_attack_vulnerability(model, triggered_loader, target_class)
+backdoor_attack_success_rate = evaluate_model_attack_vulnerability(model, triggered_loader, target_class)
+defended_attack_success_rate = evaluate_model_attack_vulnerability(defended_model, triggered_loader, target_class)
 
 # print trigger success results
 print(f"Attack success rate with backdoor model (reference): {backdoor_attack_success_rate:.3f}\n")

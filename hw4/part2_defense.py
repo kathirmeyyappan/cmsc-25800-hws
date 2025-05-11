@@ -91,7 +91,7 @@ print(f"best target class: {trigger_target}")
 print(f"mask norm: {min_mask_norm}")
 
 # we've found the backdoor target class - let's truly optimize with more iters
-best_best_mask, best_best_pattern = optimize_trigger(model, loader, target_class, num_steps=100, mask_size=(3, 32, 32))
+best_best_mask, best_best_pattern = optimize_trigger(model, loader, trigger_target, num_steps=100, mask_size=(3, 32, 32))
 trigger_info = torch.stack([best_best_pattern, best_best_mask], dim=0)
 torch.save(trigger_info, 'part2_reverse_engineered_trigger.pth')
 
@@ -221,8 +221,8 @@ def evaluate_model_attack_vulnerability(model, val_loader, target):
 # -------------- EVALUATE MODEL ACCORDING TO HW PDF --------------
 
 # get 500 clean smaples from source class
-source_indices = [i for i in range(len(trainset))]
-subset = Subset(trainset, random.choices(source_indices, k=1000))
+source_indices = [i for i in range(len(testset))]
+subset = Subset(testset, random.choices(source_indices, k=1000))
 eval_loader = DataLoader(subset, batch_size=64, shuffle=True, num_workers=2)
 
 backdoor_clean_acc = evaluate_model(model, eval_loader)
@@ -248,8 +248,8 @@ for i in range(len(subset)):
 triggered_dataset = TensorDataset(torch.stack(triggered_images), torch.tensor(triggered_labels))
 triggered_loader = DataLoader(triggered_dataset, batch_size=64, shuffle=False) # got rid of num workers cuz it was causing GPU issues (?)
 
-backdoor_attack_success_rate = evaluate_model_attack_vulnerability(defended_model, triggered_loader, target_class)
-defended_attack_success_rate = evaluate_model_attack_vulnerability(model, triggered_loader, target_class)
+backdoor_attack_success_rate = evaluate_model_attack_vulnerability(model, triggered_loader, target_class)
+defended_attack_success_rate = evaluate_model_attack_vulnerability(defended_model, triggered_loader, target_class)
 
 # print trigger success results
 print(f"Attack success rate with backdoor model (reference): {backdoor_attack_success_rate:.3f}\n")
