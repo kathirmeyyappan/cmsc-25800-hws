@@ -12,7 +12,7 @@ import time
 from torchvision.models import vgg16
 
 from part1_backdoor_training import evaluate_model
-from hw4_part2_starter import img2normedtensor, normedtensor2img, part2, transform, trainset, testset, trainloader, testloader, model, device, num_classes
+from part2_starter import img2normedtensor, normedtensor2img, part2, transform, trainset, testset, trainloader, testloader, model, device, num_classes
 
 trigger_target = 18
 

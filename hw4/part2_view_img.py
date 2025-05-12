@@ -11,7 +11,7 @@ import random
 from math import inf
 import time
 
-from hw4_part2_starter import transform, trainset, testset, trainloader, testloader, model, device, num_classes, normedtensor2img, img2normedtensor, part2
+from part2_starter import transform, trainset, testset, trainloader, testloader, model, device, num_classes, normedtensor2img, img2normedtensor, part2
 
 target_class = 18
 
