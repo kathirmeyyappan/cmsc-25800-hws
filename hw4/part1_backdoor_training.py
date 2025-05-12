@@ -126,7 +126,7 @@ def train_model(training_set, validation_set):
 
 
     # save model for eval
-    torch.save(model.state_dict(), "./models/part1_backdoor_model.pth")
+    torch.save(model.state_dict(), "./part1_backdoor_model.pth")
     
 
 if __name__ == "__main__":
@@ -173,7 +173,7 @@ if __name__ == "__main__":
     
     backdoor_model = vgg16()
     backdoor_model.classifier[6] = nn.Linear(4096, 43) 
-    backdoor_model.load_state_dict(torch.load('./models/part1_backdoor_model.pth', map_location=device))
+    backdoor_model.load_state_dict(torch.load('./part1_backdoor_model.pth', map_location=device))
     backdoor_model = backdoor_model.to(device)
     backdoor_model.eval()
 

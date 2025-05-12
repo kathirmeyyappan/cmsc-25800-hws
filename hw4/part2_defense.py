@@ -156,7 +156,7 @@ def train_model(training_set, validation_set):
 
 
     # save model for eval
-    torch.save(model.state_dict(), "./models/part2_backdoor_defended_model.pth")
+    torch.save(model.state_dict(), "./part2_backdoor_defended_model.pth")
 
 
 # aight let's fix this bih
@@ -196,7 +196,7 @@ train_model(dirty_trainset, dirty_testset)
 
 defended_model = vgg16()
 defended_model.classifier[6] = nn.Linear(4096, 43) 
-defended_model.load_state_dict(torch.load('./models/part2_backdoor_defended_model.pth', map_location=device))
+defended_model.load_state_dict(torch.load('./part2_backdoor_defended_model.pth', map_location=device))
 defended_model = defended_model.to(device)
 defended_model.eval()
 
