@@ -97,6 +97,11 @@ trigger_target = outlier_indices.argmax().item()
 best_mask, best_pattern, trigger_target = masks_patterns_targets[trigger_target]
 print(f"best target class by MAD: {trigger_target}")
 
+# we've found the backdoor target class - let's truly optimize with more iters
+best_best_mask, best_best_pattern = optimize_trigger(model, loader, trigger_target, num_steps=100, mask_size=(3, 32, 32))
+trigger_info = torch.stack([best_best_pattern, best_best_mask], dim=0)
+torch.save(trigger_info, 'part2_reverse_engineered_trigger.pth')
+
 # end = time.time()
 # print(f"took {end - start} seconds to run")
 
